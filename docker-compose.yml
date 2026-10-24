@@ -1,11 +1,24 @@
 services:
+  db:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=creox
+      - POSTGRES_PASSWORD=creox-dev-password
+      - POSTGRES_DB=creox
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
   api:
     build: .
     ports:
       - "8000:8000"
     environment:
       - ENVIRONMENT=production
-      - DATABASE_PATH=data/master_creox.db
+      - DATABASE_URL=postgresql+psycopg://creox:creox-dev-password@db:5432/creox
       - MASTER_CREOX_ADMIN_KEY=${MASTER_CREOX_ADMIN_KEY}
-    volumes:
-      - ./data:/app/data
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - db
+volumes:
+  pgdata:
