@@ -3,6 +3,8 @@
 Keys are shown ONCE at creation. Only their SHA-256 hash is stored
 (same rule as the platform blueprint: key_hash, never the raw key).
 SQLite is used for local/Phase-1; PostgreSQL arrives in Phase 3.
+Phase 2: keys can be owned by a registered user (user_id) or be
+admin-issued (user_id = NULL).
 """
 from __future__ import annotations
 
@@ -39,29 +41,43 @@ class KeyService:
                    created_at TEXT NOT NULL,
                    last_used_at TEXT,
                    usage_count INTEGER NOT NULL DEFAULT 0,
-                   revoked INTEGER NOT NULL DEFAULT 0
+                   revoked INTEGER NOT NULL DEFAULT 0,
+                   user_id INTEGER
                )"""
         )
+        cols = [r[1] for r in self._conn.execute("PRAGMA table_info(api_keys)").fetchall()]
+        if "user_id" not in cols:  # Phase 1 tables predate user ownership
+            self._conn.execute("ALTER TABLE api_keys ADD COLUMN user_id INTEGER")
         self._conn.commit()
 
-    def create_key(self, name: str, scopes: list[str]) -> dict:
+    def create_key(self, name: str, scopes: list[str], user_id: int | None = None) -> dict:
         raw = KEY_PREFIX + secrets.token_urlsafe(32)
         cur = self._conn.execute(
-            "INSERT INTO api_keys (name, key_hash, scopes, created_at) VALUES (?, ?, ?, ?)",
-            (name, _hash(raw), ",".join(scopes), _now()),
+            "INSERT INTO api_keys (name, key_hash, scopes, created_at, user_id) VALUES (?, ?, ?, ?, ?)",
+            (name, _hash(raw), ",".join(scopes), _now(), user_id),
         )
         self._conn.commit()
-        return {"id": cur.lastrowid, "name": name, "key": raw, "scopes": scopes,
+        return {"id": cur.lastrowid, "name": name, "key": raw, "scopes": scopes, "user_id": user_id,
                 "note": "Store this key now — it is shown only once."}
 
-    def list_keys(self) -> list[dict]:
-        rows = self._conn.execute(
-            "SELECT id, name, scopes, created_at, last_used_at, usage_count, revoked FROM api_keys ORDER BY id"
-        ).fetchall()
+    def list_keys(self, user_id: int | None = None, admin: bool = False) -> list[dict]:
+        if admin:
+            rows = self._conn.execute(
+                "SELECT id, name, scopes, created_at, last_used_at, usage_count, revoked, user_id FROM api_keys ORDER BY id"
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT id, name, scopes, created_at, last_used_at, usage_count, revoked, user_id FROM api_keys WHERE user_id = ? ORDER BY id",
+                (user_id,),
+            ).fetchall()
         return [dict(r) | {"scopes": r["scopes"].split(","), "revoked": bool(r["revoked"])} for r in rows]
 
-    def revoke_key(self, key_id: int) -> bool:
-        cur = self._conn.execute("UPDATE api_keys SET revoked = 1 WHERE id = ? AND revoked = 0", (key_id,))
+    def revoke_key(self, key_id: int, user_id: int | None = None, admin: bool = False) -> bool:
+        if admin:
+            cur = self._conn.execute("UPDATE api_keys SET revoked = 1 WHERE id = ? AND revoked = 0", (key_id,))
+        else:
+            cur = self._conn.execute(
+                "UPDATE api_keys SET revoked = 1 WHERE id = ? AND revoked = 0 AND user_id = ?", (key_id, user_id))
         self._conn.commit()
         return cur.rowcount > 0
 
