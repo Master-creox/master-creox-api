@@ -1,0 +1,11 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_PATH=data/master_creox.db
+      - MASTER_CREOX_ADMIN_KEY=${MASTER_CREOX_ADMIN_KEY}
+    volumes:
+      - ./data:/app/data
