@@ -1,7 +1,7 @@
 # Master CreoX API Platform
 
 > One secure, scalable API platform powering **Jarvis**, **BabyCoach** and future CreoX projects.
-> Built by [Master-creox](https://github.com/Master-creox) · License: **Apache-2.0** · Status: **Phase 3 — Database & Usage (complete)**
+> Built by [Master-creox](https://github.com/Master-creox) · License: **Apache-2.0** · Status: **Phase 5 — Developer Platform (complete)**
 
 ## What works today
 
@@ -23,6 +23,19 @@
 - 📊 **Usage tracking** — every API call logged (endpoint, status, latency); `GET /usage` shows your totals, per-endpoint and per-day stats
 - 🛠️ **Admin controls** — `GET /admin/users`, `GET /admin/stats` (platform totals + top endpoints), admin key only
 - 🧪 **Security tests** — tampered-JWT rejection, SQL-injection login attempt, rate-limit and ownership suites (17 tests)
+
+### Phase 4 — AI API Engine
+- 💬 **Chat completions** — `POST /chat/completions` (scope `chat`) via the built-in **CreoX engine** (model `creox`, short alias `creox-brain` also accepted); other models return `400 unsupported_model`
+- 📡 **SSE streaming** — `POST /chat/completions?stream=true` streams the reply word-by-word as `data: {"delta": "..."}` lines plus `data: [DONE]`
+- 🧠 **Conversation memory** — `POST /chat/sessions`, `GET /chat/sessions`, `GET /chat/sessions/{id}/messages`; a session is readable only by its own key/user (others get 404)
+- 📊 **Usage enrichment** — chat calls record `model` + `tokens` on the usage row; `GET /models` reports the built-in `creox` engine as always `active`
+- 🔑 **No key needed** — the CreoX engine is built into the API, fully offline and deterministic; it answers cybersecurity-awareness questions from its own knowledge base and falls back honestly outside it
+
+### Phase 5 — Developer Platform
+- 🙋 **Self-service dashboard API** — `GET /developer/me` (your keys + usage summary) with any valid key, no scope required
+- 🔄 **Key rotation** — `POST /developer/keys/rotate` revokes the old key and issues a replacement with the same name/scopes (shown once); rotating someone else's key returns 404
+- 📈 **Usage breakdown** — `GET /usage/breakdown` shows per-endpoint, per-model and per-day totals for your key/user
+- 🚀 **Deploy** — free-tier guide in [DEPLOY.md](DEPLOY.md): Render free web service + free Neon Postgres; `render.yaml` Blueprint included
 
 ## Quick start
 
@@ -50,8 +63,8 @@ curl -X POST localhost:8000/api/v1/auth/token -H 'Content-Type: application/json
 | 1 | Core API foundation | ✅ |
 | 2 | Identity & Security | ✅ this release |
 | 3 | Database & Usage (PostgreSQL, migrations, usage stats API) | ✅ this release |
-| 4 | AI API Engine (chat completions, model adapters, streaming) | next |
-| 5 | Developer Platform (dashboard, docs site, VPS + HTTPS) | planned |
+| 4 | AI API Engine (chat completions, built-in CreoX engine, streaming, memory) | ✅ this release |
+| 5 | Developer Platform (self-service keys, usage breakdown, free deploy) | ✅ this release |
 
 ## Security rules
 

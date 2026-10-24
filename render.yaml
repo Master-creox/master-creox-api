@@ -1,0 +1,23 @@
+# Render Blueprint for Master CreoX API (Phase 5).
+# Deploy: connect this repo in the Render dashboard (or `render blueprint`
+# via the CLI) and set the sync:false variables below in the dashboard.
+# The free web service sleeps when idle; the free Postgres lives elsewhere
+# (Neon) — see DEPLOY.md. No secret is ever committed to this file.
+services:
+  - type: web
+    name: master-creox-api
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false # Paste the Neon Postgres URL here in the dashboard.
+      - key: MASTER_CREOX_ADMIN_KEY
+        sync: false # Long random string; set in the dashboard only.
+      - key: JWT_SECRET
+        sync: false # Long random string; set in the dashboard only.
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "100"

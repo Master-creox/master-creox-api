@@ -21,7 +21,7 @@ def _database_url() -> str:
 @dataclass(frozen=True)
 class Settings:
     app_name: str = os.environ.get("APP_NAME", "Master CreoX API")
-    version: str = "0.3.0"
+    version: str = "0.5.0"
     api_version: str = "v1"
     environment: str = os.environ.get("ENVIRONMENT", "development")
     database_path: str = os.environ.get("DATABASE_PATH", "data/master_creox.db")
@@ -34,6 +34,7 @@ class Settings:
     jwt_expire_minutes: int = int(os.environ.get("JWT_EXPIRE_MINUTES", "1440"))
     # Basic rate limiting (Phase 2): requests per minute per key/IP.
     rate_limit_per_minute: int = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "100"))
+    # Phase 4 chat engine is built in (CreoXEngine) — no provider key exists.
 
 
 settings = Settings()

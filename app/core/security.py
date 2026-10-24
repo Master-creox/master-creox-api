@@ -20,6 +20,16 @@ def require_scope(scope: str):
     return _dep
 
 
+async def require_key(request: Request, x_api_key: str | None = Header(default=None)):
+    """Any valid, non-revoked API key — no scope requirement (Phase 5)."""
+    if not x_api_key:
+        raise APIError(401, "missing_api_key", "X-API-Key header is required.")
+    record = request.app.state.key_service.lookup(x_api_key)
+    if record is None:
+        raise APIError(401, "invalid_api_key", "API key is invalid or revoked.")
+    return record
+
+
 async def require_admin(x_admin_key: str | None = Header(default=None)):
     if not settings.admin_key:
         raise APIError(503, "admin_not_configured", "Key management is disabled: MASTER_CREOX_ADMIN_KEY is not set on the server.")

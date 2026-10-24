@@ -61,6 +61,35 @@ class KeyService:
             s.commit()
             return True
 
+    def lookup(self, raw_key: str) -> dict | None:
+        """Return the record for a valid, non-revoked key (no usage bump)."""
+        with self._session() as s:
+            row = s.scalars(select(APIKey).where(APIKey.key_hash == _hash(raw_key))).first()
+            if row is None or row.revoked:
+                return None
+            return {"id": row.id, "name": row.name,
+                    "scopes": row.scopes.split(","), "user_id": row.user_id,
+                    "created_at": row.created_at, "usage_count": row.usage_count}
+
+    def rotate_key(self, key_id: int, user_id: int | None = None,
+                   caller_key_id: int | None = None) -> dict | None:
+        """Revoke ``key_id`` and issue a replacement with the same name,
+        scopes and owner. Returns the new-key dict (shown once) or None if
+        the key is not found, already revoked, or not the caller's. A key
+        may always rotate itself (caller_key_id == key_id) even when it
+        has no owning user (e.g. an admin-created key)."""
+        with self._session() as s:
+            row = s.get(APIKey, key_id)
+            if row is None or row.revoked:
+                return None
+            if row.id != caller_key_id and row.user_id != user_id:
+                return None
+            row.revoked = True
+            s.commit()
+            name, scopes = row.name, row.scopes.split(",")
+            owner = row.user_id
+        return self.create_key(name, scopes, user_id=owner)
+
     def id_for_key(self, raw_key: str) -> tuple[int | None, int | None]:
         with self._session() as s:
             row = s.scalars(select(APIKey).where(APIKey.key_hash == _hash(raw_key))).first()

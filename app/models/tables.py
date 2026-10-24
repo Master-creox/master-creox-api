@@ -1,4 +1,5 @@
-"""Database tables (Phase 3): users, api_keys, usage_logs, audit_logs."""
+"""Database tables (Phases 3–4): users, api_keys, usage_logs, audit_logs,
+conversations, messages."""
 from __future__ import annotations
 
 from sqlalchemy import Boolean, Float, Integer, String, Text
@@ -40,6 +41,29 @@ class UsageLog(Base):
     status_code: Mapped[int] = mapped_column(Integer)
     latency_ms: Mapped[float] = mapped_column(Float)
     created_at: Mapped[str] = mapped_column(String(40), index=True)
+    # Phase 4: which AI model served the request (if any) and token usage.
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class Conversation(Base):
+    """A chat session owned by one API key and/or one user (Phase 4)."""
+    __tablename__ = "conversations"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(255), default="New chat")
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class Message(Base):
+    """One turn inside a conversation (Phase 4)."""
+    __tablename__ = "messages"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(Integer, index=True)
+    role: Mapped[str] = mapped_column(String(20))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40))
 
 
 class AuditLog(Base):

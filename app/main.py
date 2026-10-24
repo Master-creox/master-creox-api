@@ -80,7 +80,9 @@ def create_app(rate_limit_per_minute: int | None = None) -> FastAPI:
                         user_id = None
             app.state.usage_service.record(
                 key_id, user_id, path, request.method,
-                response.status_code, (time.perf_counter() - start) * 1000)
+                response.status_code, (time.perf_counter() - start) * 1000,
+                model=getattr(request.state, "chat_model", None),
+                tokens=getattr(request.state, "chat_tokens", None))
         return response
 
     register_error_handlers(app)
