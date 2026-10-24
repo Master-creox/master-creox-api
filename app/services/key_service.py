@@ -1,18 +1,17 @@
-"""API key service.
+"""API key service (Phase 3: SQLAlchemy-backed).
 
-Keys are shown ONCE at creation. Only their SHA-256 hash is stored
-(same rule as the platform blueprint: key_hash, never the raw key).
-SQLite is used for local/Phase-1; PostgreSQL arrives in Phase 3.
-Phase 2: keys can be owned by a registered user (user_id) or be
-admin-issued (user_id = NULL).
+Keys are shown ONCE at creation. Only their SHA-256 hash is stored.
 """
 from __future__ import annotations
 
 import hashlib
-import os
 import secrets
-import sqlite3
 from datetime import datetime, timezone
+
+from sqlalchemy import select
+
+from app.db.session import SessionLocal
+from app.models.tables import APIKey
 
 KEY_PREFIX = "mcx_"
 
@@ -26,72 +25,55 @@ def _now() -> str:
 
 
 class KeyService:
-    def __init__(self, database_path: str):
-        self.database_path = database_path
-        if database_path != ":memory:":
-            os.makedirs(os.path.dirname(database_path) or ".", exist_ok=True)
-        self._conn = sqlite3.connect(database_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        self._conn.execute(
-            """CREATE TABLE IF NOT EXISTS api_keys (
-                   id INTEGER PRIMARY KEY AUTOINCREMENT,
-                   name TEXT NOT NULL,
-                   key_hash TEXT NOT NULL UNIQUE,
-                   scopes TEXT NOT NULL DEFAULT 'tools',
-                   created_at TEXT NOT NULL,
-                   last_used_at TEXT,
-                   usage_count INTEGER NOT NULL DEFAULT 0,
-                   revoked INTEGER NOT NULL DEFAULT 0,
-                   user_id INTEGER
-               )"""
-        )
-        cols = [r[1] for r in self._conn.execute("PRAGMA table_info(api_keys)").fetchall()]
-        if "user_id" not in cols:  # Phase 1 tables predate user ownership
-            self._conn.execute("ALTER TABLE api_keys ADD COLUMN user_id INTEGER")
-        self._conn.commit()
+    def __init__(self, session_factory=SessionLocal):
+        self._session = session_factory
 
     def create_key(self, name: str, scopes: list[str], user_id: int | None = None) -> dict:
         raw = KEY_PREFIX + secrets.token_urlsafe(32)
-        cur = self._conn.execute(
-            "INSERT INTO api_keys (name, key_hash, scopes, created_at, user_id) VALUES (?, ?, ?, ?, ?)",
-            (name, _hash(raw), ",".join(scopes), _now(), user_id),
-        )
-        self._conn.commit()
-        return {"id": cur.lastrowid, "name": name, "key": raw, "scopes": scopes, "user_id": user_id,
+        with self._session() as s:
+            row = APIKey(name=name, key_hash=_hash(raw), scopes=",".join(scopes),
+                         created_at=_now(), user_id=user_id)
+            s.add(row)
+            s.commit()
+            kid = row.id
+        return {"id": kid, "name": name, "key": raw, "scopes": scopes, "user_id": user_id,
                 "note": "Store this key now — it is shown only once."}
 
     def list_keys(self, user_id: int | None = None, admin: bool = False) -> list[dict]:
-        if admin:
-            rows = self._conn.execute(
-                "SELECT id, name, scopes, created_at, last_used_at, usage_count, revoked, user_id FROM api_keys ORDER BY id"
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT id, name, scopes, created_at, last_used_at, usage_count, revoked, user_id FROM api_keys WHERE user_id = ? ORDER BY id",
-                (user_id,),
-            ).fetchall()
-        return [dict(r) | {"scopes": r["scopes"].split(","), "revoked": bool(r["revoked"])} for r in rows]
+        with self._session() as s:
+            stmt = select(APIKey).order_by(APIKey.id)
+            if not admin:
+                stmt = stmt.where(APIKey.user_id == user_id)
+            rows = s.scalars(stmt).all()
+            return [{"id": r.id, "name": r.name, "scopes": r.scopes.split(","),
+                     "created_at": r.created_at, "last_used_at": r.last_used_at,
+                     "usage_count": r.usage_count, "revoked": bool(r.revoked),
+                     "user_id": r.user_id} for r in rows]
 
     def revoke_key(self, key_id: int, user_id: int | None = None, admin: bool = False) -> bool:
-        if admin:
-            cur = self._conn.execute("UPDATE api_keys SET revoked = 1 WHERE id = ? AND revoked = 0", (key_id,))
-        else:
-            cur = self._conn.execute(
-                "UPDATE api_keys SET revoked = 1 WHERE id = ? AND revoked = 0 AND user_id = ?", (key_id, user_id))
-        self._conn.commit()
-        return cur.rowcount > 0
+        with self._session() as s:
+            row = s.get(APIKey, key_id)
+            if row is None or row.revoked:
+                return False
+            if not admin and row.user_id != user_id:
+                return False
+            row.revoked = True
+            s.commit()
+            return True
+
+    def id_for_key(self, raw_key: str) -> tuple[int | None, int | None]:
+        with self._session() as s:
+            row = s.scalars(select(APIKey).where(APIKey.key_hash == _hash(raw_key))).first()
+            return (row.id, row.user_id) if row else (None, None)
 
     def verify(self, raw_key: str, required_scope: str) -> dict | None:
-        row = self._conn.execute(
-            "SELECT * FROM api_keys WHERE key_hash = ?", (_hash(raw_key),)
-        ).fetchone()
-        if row is None or row["revoked"]:
-            return None
-        if required_scope not in row["scopes"].split(","):
-            return None
-        self._conn.execute(
-            "UPDATE api_keys SET usage_count = usage_count + 1, last_used_at = ? WHERE id = ?",
-            (_now(), row["id"]),
-        )
-        self._conn.commit()
-        return dict(row)
+        with self._session() as s:
+            row = s.scalars(select(APIKey).where(APIKey.key_hash == _hash(raw_key))).first()
+            if row is None or row.revoked:
+                return None
+            if required_scope not in row.scopes.split(","):
+                return None
+            row.usage_count += 1
+            row.last_used_at = _now()
+            s.commit()
+            return {"id": row.id, "name": row.name, "user_id": row.user_id}
