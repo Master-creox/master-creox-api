@@ -1,7 +1,7 @@
 # Master CreoX API Platform
 
 > One secure, scalable API platform powering **Jarvis**, **BabyCoach** and future CreoX projects.
-> Built by [Master-creox](https://github.com/Master-creox) · License: **Apache-2.0** · Status: **Phase 2 — Identity & Security (complete)**
+> Built by [Master-creox](https://github.com/Master-creox) · License: **Apache-2.0** · Status: **Phase 3 — Database & Usage (complete)**
 
 ## What works today
 
@@ -17,6 +17,12 @@
 - 🔐 **User-owned API keys** — logged-in users create/list/revoke **their own** keys; the bootstrap admin key still works
 - 🚦 **Rate limiting** — per key/IP fixed window (default 100 req/min, `RATE_LIMIT_PER_MINUTE`); `429` + `Retry-After`
 - 📜 **Audit log** — register/login/key events recorded; `GET /audit-logs` (admin only)
+
+### Phase 3 — Database & Usage
+- 🗄️ **SQLAlchemy 2.0 data layer** — SQLite for dev, PostgreSQL via `DATABASE_URL` (docker-compose ships Postgres 16); **Alembic migrations** in `migrations/`
+- 📊 **Usage tracking** — every API call logged (endpoint, status, latency); `GET /usage` shows your totals, per-endpoint and per-day stats
+- 🛠️ **Admin controls** — `GET /admin/users`, `GET /admin/stats` (platform totals + top endpoints), admin key only
+- 🧪 **Security tests** — tampered-JWT rejection, SQL-injection login attempt, rate-limit and ownership suites (17 tests)
 
 ## Quick start
 
@@ -43,8 +49,8 @@ curl -X POST localhost:8000/api/v1/auth/token -H 'Content-Type: application/json
 |---|---|---|
 | 1 | Core API foundation | ✅ |
 | 2 | Identity & Security | ✅ this release |
-| 3 | Database & Usage (PostgreSQL, migrations, usage stats API) | next |
-| 4 | AI API Engine (chat completions, model adapters, streaming) | planned |
+| 3 | Database & Usage (PostgreSQL, migrations, usage stats API) | ✅ this release |
+| 4 | AI API Engine (chat completions, model adapters, streaming) | next |
 | 5 | Developer Platform (dashboard, docs site, VPS + HTTPS) | planned |
 
 ## Security rules
@@ -56,4 +62,4 @@ curl -X POST localhost:8000/api/v1/auth/token -H 'Content-Type: application/json
 
 ## Tech stack
 
-Python · FastAPI · Pydantic · PyJWT · Argon2 · SQLite (Phase 1–2 → PostgreSQL Phase 3) · Pytest · Docker
+Python · FastAPI · Pydantic · PyJWT · Argon2 · SQLAlchemy 2.0 · Alembic · SQLite / PostgreSQL · Pytest · Docker
