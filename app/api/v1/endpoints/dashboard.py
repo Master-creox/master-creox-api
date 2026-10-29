@@ -1,4 +1,4 @@
-"""Master CreoX API dashboard (v0.6.1).
+"""Master CreoX API dashboard (v0.6.2).
 
 A professional HTML dashboard, not a replacement for /docs.
 The page itself is public HTML; every data call still needs the
@@ -39,7 +39,29 @@ a{color:#22d3ee}.warn{color:#fbbf24}.ok{color:#34d399}.bad{color:#f43f5e}
 </style></head><body>
 <header><div><div class="brand">MASTER <span>CREOX API</span></div><div class="tag">DASHBOARD — KEYS, DETAILS &amp; LINE-BY-LINE USAGE</div></div><div><button onclick="loadAll()">Refresh</button><a href="/docs" style="margin-left:8px">API Docs</a></div></header>
 <div class="strip"><span>SERVICE: <b class="ok" id="st-service">—</b></span><span>VERSION: <b id="st-version">—</b></span><span class="admin-only">ACTIVE KEYS: <b id="st-keys">—</b></span><span class="admin-only">TOTAL REQUESTS: <b id="st-req">—</b></span><span class="admin-only">REQUESTS TODAY: <b id="st-today">—</b></span><span class="admin-only" id="st-time">LAST UPDATED: —</span></div>
-<div style="padding:14px"><div class="panel" id="public-note"><h2>Master CreoX API</h2><p class="small">This is the public view. API users work with their own key against the endpoints in the <a href="/docs">API Docs</a> — no admin tools are shown here. Admin tools live on the admin view of this dashboard, which only the owner opens.</p></div></div>
+<div style="padding:14px"><div class="panel" id="public-note"><h2>Master CreoX API</h2><p class="small">This is the public view. API users work with their own key in the working window below — no admin tools are shown here. Admin tools live on the admin view of this dashboard, which only the owner opens. Full endpoint reference: <a href="/docs">API Docs</a>.</p></div></div>
+<div class="grid">
+<div class="panel"><h2>Your API Key</h2>
+<label>Your own key (X-API-Key) — NOT the admin key. Browser localStorage only.</label>
+<input type="password" id="userkey" placeholder="Paste the mcx_ key given to you">
+<button onclick="saveUserKey()">Save in this browser</button><button class="secondary" onclick="clearUserKey()">Clear</button>
+<p class="small" id="usermsg">Without your key, chat and tools below will return 401.</p></div>
+<div class="panel"><h2>Chat — CreoX</h2>
+<label>Ask CreoX (cybersecurity + C/C++ topics)</label><input type="text" id="chatmsg" placeholder="e.g. what is phishing?">
+<button onclick="sendChat()">Send</button>
+<div id="chatreply" class="small" style="margin-top:10px"></div></div>
+</div>
+<div class="grid">
+<div class="panel"><h2>Tools</h2>
+<label>Password to check</label><input type="password" id="pwinput" placeholder="A password to score">
+<button onclick="checkPassword()">Check password</button><div id="pwresult" class="small" style="margin:8px 0 14px"></div>
+<label>Suspicious URL to check</label><input type="text" id="urlinput" placeholder="https://example.com/login">
+<button onclick="checkPhishing()">Check URL</button><div id="urlresult" class="small" style="margin-top:8px"></div></div>
+<div class="panel"><h2>My Usage</h2>
+<p class="small">Only your own key's usage — never anyone else's, never admin totals.</p>
+<button onclick="loadMyUsage()">Show my usage</button>
+<div id="myusage" class="small" style="margin-top:10px"></div></div>
+</div>
 <div class="grid">
 <div class="panel admin-only"><h2>Admin Access</h2>
 <label>Admin key (X-Admin-Key) — browser localStorage only, never hardcoded</label>
@@ -61,6 +83,35 @@ a{color:#22d3ee}.warn{color:#fbbf24}.ok{color:#34d399}.bad{color:#f43f5e}
 <script>
 var API = "/api/v1";
 function adminHeaders(){ var k = localStorage.getItem("creox_admin_key") || ""; return k ? {"X-Admin-Key": k} : {}; }
+function userHeaders(){ var k = localStorage.getItem("creox_user_key") || ""; return k ? {"X-API-Key": k} : {}; }
+function saveUserKey(){ var v = document.getElementById("userkey").value.trim(); if(v){ localStorage.setItem("creox_user_key", v); document.getElementById("usermsg").textContent = "Your key saved in this browser only."; } }
+function clearUserKey(){ localStorage.removeItem("creox_user_key"); document.getElementById("userkey").value = ""; document.getElementById("usermsg").textContent = "Your key cleared from this browser."; }
+function sendChat(){
+  var q = document.getElementById("chatmsg").value.trim();
+  if(!q){ document.getElementById("chatreply").textContent = "Pehle sawal likho."; return; }
+  document.getElementById("chatreply").textContent = "Soch raha hai...";
+  fetch(API + "/chat/completions", {method: "POST", headers: Object.assign({"Content-Type": "application/json"}, userHeaders()), body: JSON.stringify({model: "creox", messages: [{role: "user", content: q}]})}).then(function(r){ return r.json(); }).then(function(d){
+    document.getElementById("chatreply").innerHTML = d.reply ? esc(d.reply) : "<span class='bad'>" + esc(d.message || d.error || "Failed — check your key.") + "</span>";
+  }).catch(function(){ document.getElementById("chatreply").textContent = "Request fail ho gaya."; });
+}
+function checkPassword(){
+  var p = document.getElementById("pwinput").value;
+  fetch(API + "/tools/password-check", {method: "POST", headers: Object.assign({"Content-Type": "application/json"}, userHeaders()), body: JSON.stringify({password: p})}).then(function(r){ return r.json(); }).then(function(d){
+    document.getElementById("pwresult").innerHTML = d.score == null ? "<span class='bad'>" + esc(d.message || d.error || "Failed — check your key.") + "</span>" : "Score: <b>" + d.score + "</b> — " + esc(d.label) + "<br>" + esc((d.feedback || []).join(" "));
+  });
+}
+function checkPhishing(){
+  var u = document.getElementById("urlinput").value.trim();
+  fetch(API + "/tools/phishing-check", {method: "POST", headers: Object.assign({"Content-Type": "application/json"}, userHeaders()), body: JSON.stringify({url: u})}).then(function(r){ return r.json(); }).then(function(d){
+    document.getElementById("urlresult").innerHTML = d.risk_score == null ? "<span class='bad'>" + esc(d.message || d.error || "Failed — check your key.") + "</span>" : (d.is_suspicious ? "<span class='bad'>Suspicious</span>" : "<span class='ok'>Looks OK</span>") + " — risk score " + d.risk_score + "<br>" + esc((d.reasons || []).join(" "));
+  });
+}
+function loadMyUsage(){
+  fetch(API + "/usage/breakdown", {headers: userHeaders()}).then(function(r){ return r.json(); }).then(function(d){
+    if(d.total_requests == null){ document.getElementById("myusage").innerHTML = "<span class='bad'>" + esc(d.message || d.error || "Failed — check your key.") + "</span>"; return; }
+    document.getElementById("myusage").innerHTML = "Total requests: <b>" + d.total_requests + "</b><br>Total tokens: <b>" + d.total_tokens + "</b><br>By endpoint: " + esc(JSON.stringify(d.by_endpoint));
+  });
+}
 function saveKey(){ var v = document.getElementById("adminkey").value.trim(); if(v){ localStorage.setItem("creox_admin_key", v); document.getElementById("authmsg").textContent = "Admin key saved in this browser only."; } loadAll(); }
 function clearKey(){ localStorage.removeItem("creox_admin_key"); document.getElementById("adminkey").value = ""; document.getElementById("authmsg").textContent = "Admin key cleared from this browser."; }
 function esc(s){ return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
@@ -116,6 +167,7 @@ function loadUsage(){
   var adminEls = document.querySelectorAll(".admin-only");
   for(var i = 0; i < adminEls.length; i++){ adminEls[i].style.display = IS_ADMIN_VIEW ? "" : "none"; }
   document.getElementById("public-note").style.display = IS_ADMIN_VIEW ? "none" : "";
+  var uk = localStorage.getItem("creox_user_key"); if(uk) document.getElementById("userkey").value = uk;
   if(!IS_ADMIN_VIEW){ loadStatus(); return; }
   var k = localStorage.getItem("creox_admin_key"); if(k) document.getElementById("adminkey").value = k; loadAll(); setInterval(loadStatus, 15000);
 })();

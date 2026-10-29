@@ -46,6 +46,16 @@ def test_admin_panels_hidden_by_default():
         "Paste MASTER_CREOX_ADMIN_KEY here", "")
 
 
+def test_friend_working_window_present_without_admin():
+    html = _client().get("/api/v1/dashboard").text
+    assert "Your API Key" in html
+    assert "Chat — CreoX" in html
+    assert "Show my usage" in html
+    # Working window calls user-scoped endpoints only — never /keys or /admin.
+    assert "/chat/completions" in html and "/tools/password-check" in html
+    assert "/usage/breakdown" in html
+
+
 def test_key_detail_and_usage_flow():
     c = _client()
     created = c.post("/api/v1/keys", json={"name": "dash-test", "scopes": ["chat"]}, headers=ADMIN).json()
