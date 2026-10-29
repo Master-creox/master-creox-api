@@ -14,3 +14,8 @@ def list_users(request: Request):
 @router.get("/admin/stats", dependencies=[Depends(require_admin)])
 def platform_stats(request: Request):
     return request.app.state.usage_service.platform_stats()
+
+
+@router.get("/admin/usage/recent", dependencies=[Depends(require_admin)])
+def admin_recent_usage(request: Request, limit: int = 50):
+    return {"recent": request.app.state.usage_service.recent_logs(limit=min(limit, 100))}

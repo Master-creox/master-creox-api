@@ -36,3 +36,26 @@ def revoke_key(key_id: int, request: Request, actor=Depends(resolve_actor)):
     request.app.state.audit_service.log(
         user["email"] if user else "admin", "key.revoke", f"key_id={key_id}")
     return {"revoked": key_id}
+
+
+@router.get("/keys/{key_id}")
+def key_detail(key_id: int, request: Request, actor=Depends(resolve_actor)):
+    kind, user = actor
+    keys = request.app.state.key_service.list_keys(admin=(kind == "admin"), user_id=user["id"] if user else None)
+    row = next((k for k in keys if k["id"] == key_id), None)
+    if row is None:
+        raise APIError(404, "key_not_found", "No key with that id (or it is not yours).")
+    usage = request.app.state.usage_service.breakdown(user_id=None, key_id=key_id)
+    recent = request.app.state.usage_service.recent_logs(key_id=key_id, limit=50)
+    return {"key": row, "usage": usage, "recent": recent}
+
+
+@router.get("/keys/{key_id}/usage")
+def key_usage(key_id: int, request: Request, actor=Depends(resolve_actor)):
+    kind, user = actor
+    keys = request.app.state.key_service.list_keys(admin=(kind == "admin"), user_id=user["id"] if user else None)
+    if not any(k["id"] == key_id for k in keys):
+        raise APIError(404, "key_not_found", "No key with that id (or it is not yours).")
+    return {"key_id": key_id,
+            "usage": request.app.state.usage_service.breakdown(user_id=None, key_id=key_id),
+            "recent": request.app.state.usage_service.recent_logs(key_id=key_id, limit=100)}

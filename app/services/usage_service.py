@@ -75,6 +75,20 @@ class UsageService:
                 "by_model": dict(by_model),
                 "by_day": dict(sorted(by_day.items()))}
 
+    def recent_logs(self, user_id: int | None = None, key_id: int | None = None, limit: int = 50) -> list[dict]:
+        """Line-by-line usage rows, newest first. Admin (both None) = all rows."""
+        from sqlalchemy import desc
+        with self._session() as s:
+            stmt = select(UsageLog).order_by(desc(UsageLog.id))
+            if user_id is not None or key_id is not None:
+                rows = self._rows_for(s, user_id, key_id)
+                rows = sorted(rows, key=lambda r: r.id, reverse=True)[:limit]
+            else:
+                rows = s.scalars(stmt.limit(limit)).all()
+            return [{"id": r.id, "key_id": r.key_id, "user_id": r.user_id, "method": r.method,
+                     "endpoint": r.endpoint, "status_code": r.status_code, "latency_ms": r.latency_ms,
+                     "model": r.model, "tokens": r.tokens, "created_at": r.created_at} for r in rows]
+
     def platform_stats(self) -> dict:
         with self._session() as s:
             total_users = len(s.scalars(select(User.id)).all())
