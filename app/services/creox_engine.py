@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 
+from app.services.knowledge_ccpp import _CCPP_TOPICS
 from app.services.model_adapter import ChatResult
 
 MODEL_ID = "creox"
@@ -23,22 +24,27 @@ _GREETING_PHRASES = {"good morning", "good afternoon", "good evening"}
 _GREETING_REPLY = (
     "Hello! I am CreoX, the built-in assistant of the Master CreoX API. "
     "Ask me a cybersecurity-awareness question — for example about phishing, "
-    "ransomware, OTP fraud, UPI scams, or public WiFi safety."
+    "ransomware, OTP fraud, UPI scams, or public WiFi safety — or a C/C++ "
+    "question, for example about pointers, classes, or inheritance."
 )
 
 _CAPABILITIES_REPLY = (
     "I can answer cybersecurity-awareness questions on topics like password "
     "safety, phishing, ransomware, AI voice scams, OTP fraud, UPI and QR scams, "
     "public WiFi dangers, malware, two-factor authentication, safe browsing, "
-    "fake customer-care numbers, and WhatsApp phishing links. I can also point "
-    "you to this platform's own tools: POST /tools/password-check for password "
-    "strength and POST /tools/phishing-check for suspicious URLs."
+    "fake customer-care numbers, and WhatsApp phishing links. I can also answer "
+    "C/C++ questions — pointers, arrays, strings, structures, memory, classes, "
+    "inheritance, polymorphism, templates and STL — each with its cheat-sheet "
+    "source. I can also point you to this platform's own tools: "
+    "POST /tools/password-check for password strength and "
+    "POST /tools/phishing-check for suspicious URLs."
 )
 
 _FALLBACK_REPLY = (
     "I don't have a reliable answer for that one. I answer "
     "cybersecurity-awareness questions — try asking about phishing, ransomware, "
-    "OTP fraud, UPI scams, or password safety. You can also use this platform's "
+    "OTP fraud, UPI scams, or password safety — and C/C++ questions like "
+    "pointers, classes, or inheritance. You can also use this platform's "
     "own tools: POST /tools/password-check for password strength and "
     "POST /tools/phishing-check for suspicious URLs."
 )
@@ -226,19 +232,22 @@ class CreoXEngine:
             return _CAPABILITIES_REPLY
 
         # Topic matching: count distinct matched keywords per topic.
-        best_topic, best_score = None, 0
-        for topic, (keywords, _answer) in _TOPICS.items():
-            score = 0
-            for kw in keywords:
-                if " " in kw:
-                    if kw in normalized:
+        # Cyber topics first (existing behaviour unchanged), then the
+        # separate C/C++ module — so a cyber question never changes meaning.
+        for topics in (_TOPICS, _CCPP_TOPICS):
+            best_topic, best_score = None, 0
+            for topic, (keywords, _answer) in topics.items():
+                score = 0
+                for kw in keywords:
+                    if " " in kw:
+                        if kw in normalized:
+                            score += 1
+                    elif kw in tokens:
                         score += 1
-                elif kw in tokens:
-                    score += 1
-            if score > best_score:
-                best_topic, best_score = topic, score
-        if best_topic is not None:
-            return _TOPICS[best_topic][1]
+                if score > best_score:
+                    best_topic, best_score = topic, score
+            if best_topic is not None:
+                return topics[best_topic][1]
         return _FALLBACK_REPLY
 
     def complete(self, messages: list, model: str) -> ChatResult:
