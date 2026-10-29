@@ -1,11 +1,18 @@
-"""Master CreoX API dashboard (v0.6.0).
+"""Master CreoX API dashboard (v0.6.1).
 
 A professional HTML dashboard, not a replacement for /docs.
 The page itself is public HTML; every data call still needs the
 admin key, which the browser keeps only in its own localStorage
 (never hardcoded, never sent to Muse, never stored server-side).
-Panels: live status, key auto-generation, key list, key detail,
-and line-by-line usage.
+Admin panels are HIDDEN by default: a friend opening the plain
+dashboard link sees only a public note, never Admin Access, key
+generation, key lists or usage. The admin view appears only at
+/dashboard?admin=1 — and even then, every data call still needs
+the admin key (401 without it), so hiding is presentation, not
+the security itself: the key check on the endpoints is the real
+protection.
+Panels (admin view only): live status, key auto-generation,
+key list, key detail, and line-by-line usage.
 """
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
@@ -31,14 +38,15 @@ table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #1e3a5f;
 a{color:#22d3ee}.warn{color:#fbbf24}.ok{color:#34d399}.bad{color:#f43f5e}
 </style></head><body>
 <header><div><div class="brand">MASTER <span>CREOX API</span></div><div class="tag">DASHBOARD — KEYS, DETAILS &amp; LINE-BY-LINE USAGE</div></div><div><button onclick="loadAll()">Refresh</button><a href="/docs" style="margin-left:8px">API Docs</a></div></header>
-<div class="strip"><span>SERVICE: <b class="ok" id="st-service">—</b></span><span>VERSION: <b id="st-version">—</b></span><span>ACTIVE KEYS: <b id="st-keys">—</b></span><span>TOTAL REQUESTS: <b id="st-req">—</b></span><span>REQUESTS TODAY: <b id="st-today">—</b></span><span id="st-time">LAST UPDATED: —</span></div>
+<div class="strip"><span>SERVICE: <b class="ok" id="st-service">—</b></span><span>VERSION: <b id="st-version">—</b></span><span class="admin-only">ACTIVE KEYS: <b id="st-keys">—</b></span><span class="admin-only">TOTAL REQUESTS: <b id="st-req">—</b></span><span class="admin-only">REQUESTS TODAY: <b id="st-today">—</b></span><span class="admin-only" id="st-time">LAST UPDATED: —</span></div>
+<div style="padding:14px"><div class="panel" id="public-note"><h2>Master CreoX API</h2><p class="small">This is the public view. API users work with their own key against the endpoints in the <a href="/docs">API Docs</a> — no admin tools are shown here. Admin tools live on the admin view of this dashboard, which only the owner opens.</p></div></div>
 <div class="grid">
-<div class="panel"><h2>Admin Access</h2>
+<div class="panel admin-only"><h2>Admin Access</h2>
 <label>Admin key (X-Admin-Key) — browser localStorage only, never hardcoded</label>
 <input type="password" id="adminkey" placeholder="Paste MASTER_CREOX_ADMIN_KEY here">
 <button onclick="saveKey()">Save in this browser</button><button class="secondary" onclick="clearKey()">Clear</button>
 <p class="small" id="authmsg">Without the admin key, key creation and key details will return 401. The key is sent only as a header to this API.</p></div>
-<div class="panel"><h2>Generate Key — Auto</h2>
+<div class="panel admin-only"><h2>Generate Key — Auto</h2>
 <label>Key name</label><input type="text" id="keyname" placeholder="e.g. aegis-prime">
 <label>Scopes</label><div style="margin:6px 0 12px"><label><input type="checkbox" class="scope" value="chat" checked> chat</label> &nbsp; <label><input type="checkbox" class="scope" value="tools" checked> tools</label></div>
 <button onclick="genKey()">Generate key</button>
@@ -46,17 +54,18 @@ a{color:#22d3ee}.warn{color:#fbbf24}.ok{color:#34d399}.bad{color:#f43f5e}
 <p class="small warn">New key is shown only once. Copy it now and store it safely — it will never be shown again.</p></div>
 </div>
 <div class="grid">
-<div class="panel"><h2>All Keys</h2><div id="keylist" class="small">Load with admin key, then Refresh.</div></div>
-<div class="panel"><h2>Key Detail</h2><div id="keydetail" class="small">Click Details on any key above.</div></div>
+<div class="panel admin-only"><h2>All Keys</h2><div id="keylist" class="small">Load with admin key, then Refresh.</div></div>
+<div class="panel admin-only"><h2>Key Detail</h2><div id="keydetail" class="small">Click Details on any key above.</div></div>
 </div>
-<div style="padding:0 14px 20px"><div class="panel"><h2>Usage — Line by Line</h2><div id="usagelog" class="small">Load with admin key, then Refresh.</div></div></div>
+<div style="padding:0 14px 20px"><div class="panel admin-only"><h2>Usage — Line by Line</h2><div id="usagelog" class="small">Load with admin key, then Refresh.</div></div></div>
 <script>
 var API = "/api/v1";
 function adminHeaders(){ var k = localStorage.getItem("creox_admin_key") || ""; return k ? {"X-Admin-Key": k} : {}; }
 function saveKey(){ var v = document.getElementById("adminkey").value.trim(); if(v){ localStorage.setItem("creox_admin_key", v); document.getElementById("authmsg").textContent = "Admin key saved in this browser only."; } loadAll(); }
 function clearKey(){ localStorage.removeItem("creox_admin_key"); document.getElementById("adminkey").value = ""; document.getElementById("authmsg").textContent = "Admin key cleared from this browser."; }
 function esc(s){ return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
-function loadAll(){ loadStatus(); loadKeys(); loadUsage(); }
+var IS_ADMIN_VIEW = new URLSearchParams(window.location.search).get("admin") === "1";
+function loadAll(){ loadStatus(); if(IS_ADMIN_VIEW){ loadKeys(); loadUsage(); } }
 function loadStatus(){
   fetch(API + "/health").then(function(r){ return r.json(); }).then(function(d){
     document.getElementById("st-service").textContent = d.status || "ok";
@@ -103,7 +112,13 @@ function loadUsage(){
     document.getElementById("usagelog").innerHTML = "<table><tr><th>Time</th><th>Key ID</th><th>Method</th><th>Endpoint</th><th>Status</th><th>Latency</th><th>Model</th><th>Tokens</th></tr>" + rows + "</table>";
   }).catch(function(){});
 }
-(function(){ var k = localStorage.getItem("creox_admin_key"); if(k) document.getElementById("adminkey").value = k; loadAll(); setInterval(loadStatus, 15000); })();
+(function(){
+  var adminEls = document.querySelectorAll(".admin-only");
+  for(var i = 0; i < adminEls.length; i++){ adminEls[i].style.display = IS_ADMIN_VIEW ? "" : "none"; }
+  document.getElementById("public-note").style.display = IS_ADMIN_VIEW ? "none" : "";
+  if(!IS_ADMIN_VIEW){ loadStatus(); return; }
+  var k = localStorage.getItem("creox_admin_key"); if(k) document.getElementById("adminkey").value = k; loadAll(); setInterval(loadStatus, 15000);
+})();
 </script></body></html>
 """
 

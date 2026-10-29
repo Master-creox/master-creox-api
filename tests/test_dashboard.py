@@ -34,6 +34,18 @@ def test_dashboard_page_returns_html():
     assert "All Keys" in r.text
 
 
+def test_admin_panels_hidden_by_default():
+    # Admin sections exist in the HTML but are gated behind ?admin=1 in JS,
+    # and the public view shows only a public note — no admin data is
+    # rendered server-side into the page at all.
+    html = _client().get("/api/v1/dashboard").text
+    assert 'class="panel admin-only"><h2>Admin Access' in html
+    assert 'admin") === "1"' in html
+    assert "public view" in html
+    assert "MASTER_CREOX_ADMIN_KEY" not in html.replace(
+        "Paste MASTER_CREOX_ADMIN_KEY here", "")
+
+
 def test_key_detail_and_usage_flow():
     c = _client()
     created = c.post("/api/v1/keys", json={"name": "dash-test", "scopes": ["chat"]}, headers=ADMIN).json()
